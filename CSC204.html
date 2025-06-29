@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSC 204</title>
+  <style>
+    @media print {
+      button, #timer, #warning { display: none !important; }
+      body { background: #fff !important; }
+    }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #d9e4f5, #fceabb);
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      background: #fff;
+      padding: 30px;
+      max-width: 800px;
+      margin: 40px auto;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+    h1, h2 {
+      color: #2c3e50;
+    }
+    label, p {
+      display: block;
+      margin-top: 15px;
+    }
+    input[type="text"], select {
+      width: 100%;
+      padding: 5px;
+      margin-top: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-weight: bold;
+      background: #3498db;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .hidden { display: none; }
+    .question-block {
+      margin-bottom: 20px;
+      background: #f7f7f7;
+      padding: 15px;
+      border-radius: 5px;
+    }
+    #timer {
+      float: right;
+      font-weight: bold;
+      color: #e74c3c;
+    }
+    #resultPage { text-align: center; }
+    #downloadBtn { background: #27ae60; }
+    #restartBtn { background: #8e44ad; }
+    #printBtn { background: #f39c12; margin-left: 10px; }
+    #answerBtn { background: #34495e; margin-left: 10px; }
+    #warning { color: #e67e22; font-weight: bold; }
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      text-align: center;
+    }
+    @media (max-width: 600px) {
+      .container { width: 95%; padding: 15px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay" onclick="this.style.display='none'">Time is up. Your test has been submitted.</div>
+
+  <div id="infoPage" class="container">
+    <h1 align="center">LAGOS STATE UNIVERSITY (LASU)</h1>
+    <h2>Student Login</h2>
+    <form id="studentForm">
+      <label>Full Name: <input type="text" id="name" required></label>
+      <label>Matric Number: <input type="text" id="matric" required></label>
+      <label>Department: <input type="text" id="department" required></label>
+      <label>Level:
+        <select id="level" required>
+          <option value="">Select Level</option>
+          <option value="100">100 Level</option>
+          <option value="200">200 Level</option>
+          <option value="300">300 Level</option>
+          <option value="400">400 Level</option>
+          <option value="500">500 Level</option>
+        </select>
+      </label>
+      <button type="submit">Start Test</button>
+    </form>
+    <p id="levelError" style="color:red; font-weight: bold;"></p>
+  </div>
+
+  <div id="testPage" class="container hidden">
+    <h2>CSC 204 Test <span id="timer">15:00</span></h2>
+    <p id="warning"></p>
+    <form id="testForm"></form>
+    <button type="submit" form="testForm">Submit Test</button>
+  </div>
+
+  <div id="resultPage" class="container hidden">
+    <h2>Test Result</h2>
+    <p id="resultText"></p>
+    <button id="downloadBtn">Download Result</button>
+    <button id="printBtn">Print / Save as PDF</button>
+    <button id="answerBtn">View Correct Answers</button>
+    <button id="restartBtn">Back to Home</button>
+    <div id="answers" class="hidden"></div>
+  </div>
+
+  <script>
+    const studentForm = document.getElementById("studentForm");
+    const testForm = document.getElementById("testForm");
+    const infoPage = document.getElementById("infoPage");
+    const testPage = document.getElementById("testPage");
+    const resultPage = document.getElementById("resultPage");
+    const resultText = document.getElementById("resultText");
+    const timerDisplay = document.getElementById("timer");
+    const warningDisplay = document.getElementById("warning");
+    const levelError = document.getElementById("levelError");
+    const overlay = document.getElementById("overlay");
+    const answersDiv = document.getElementById("answers");
+
+    const initialTime = 900;
+    let timeLeft = initialTime;
+    let timer;
+    let studentData = {};
+
+    const questions = [
+      { question: "<strong>LOGIC AND PROPOSITIONS (1-5):</strong><br>1. Which of the following is a tautology?",
+        options: ["p ∧ ¬p", "p ∨ ¬p", "p 'n ¬p", "¬(p ∨ p)"],
+        answer: "p ∨ ¬p" 
+      },
+      {
+        question: "2. The contrapositive of 'If p then q'is:",
+        options: ["If q then p", "If not p then not q", "If not q then not p", "If q then not p"],
+        answer: "If not q then not p"
+      },
+      {
+        question: "3. The truth value of 'p ∧ (¬p ∨ q)' when p is true and q is false:",
+        options: ["True", "False", "Undefined", "None of the above"],
+        answer: "False"
+      },
+      {
+        question: "4. The negation of 'All dogs are friendly' is:",
+        options: [
+          "All dogs are not friendly.",
+          "Some dogs are not friendly.",
+          "No dog is friendly.",
+          "Some dogs are friendly."
+        ],
+        answer: "Some dogs are not friendly."
+      },
+      {
+        question: "5. A compound proposition that is always false is called:",
+        options: ["Tautology", "Contingency", "Contradiction", "Proposition"],
+        answer: "Contradiction"
+      },
+      {
+        question: "<strong>SET THEORY (6-10):</strong><br>  6. If A = {1,2,3},B = {2,3,4}, what is A U B?",
+        options: ["{2,3}", "{1,2,3,4}", "{1,4}", "{1,2,3}"],
+        answer: "{1,2,3,4}"
+      },
+      {
+        question: "7. What is the cardinality of the power set of {a,b,c}?",
+        options: ["3", "6", "8", "9"],
+        answer: "8"
+      },
+      {
+        question: "8. The intersection of two disjoint sets is:",
+        options: ["Universal set", "One of the sets", "Empty set", "Cannot be determined"],
+        answer: "Empty set"
+      },
+      {
+        question: "9. A ⊆ B means:",
+        options: ["A and B are equal", "A has elements not in B", "All elements of A are in B", "B is a subset of A"],
+        answer: "All elements of A are in B"
+      },
+      {
+        question: "10. The complement of a set A, denoted A', contains:",
+        options: ["All elements in A", "Elements in A and B", "Elements not in A", "None of the above"],
+        answer: "Elements not in A"
+      },
+      {
+        question: "<strong>RELATIONS AND FUNCTIONS (11-15)</strong>:<br>  11. A relation R on set A is called reflexive if:",
+        options: ["aRb implies bRa", "aRa for all a in A", "aRb implies b ≠ a", "None of the above"],
+        answer: "aRa for all a in A"
+      },
+      {
+        question: "12. A relation that is both symmetric and transitive but not reflexive is:",
+        options: ["Empty relation", "Identity relation", "University relation", "None of the above"],
+        answer: "Empty relation"
+      },
+      {
+        question: "13. A function f is one-to-one if:",
+        options: ["Every input has the same output", "No two inputs have the same output", "Every output has more than one input", "It maps A to B uniquely"],
+        answer: "No two inputs have the same output"
+      },
+      {
+        question: "14. The number of binary relations on a set of 3 elements is:",
+        options: ["6", "9", "8", "512"],
+        answer: "512"
+      },
+      {
+        question: "15. The range of a function is:",
+        options: ["Domain", "Input", "Output values", "Image"],
+        answer: "Output values"
+      },
+      {
+        question: "<strong>COMBINATORICS AND COUNTING (16-20):</strong><br>  16. The number of permutations of 4 elements from 6:",
+        options: ["6", "15", "360", "24"],
+        answer: "360"
+      },
+      {
+        question: "17. C(n,r) is equal to:",
+        options: ["n/r", "n!/(r!(n-r)!)", "r!/(n-r)!", "n!r!"],
+        answer: "n!/(r!(n-r)!)"
+      },
+      {
+        question: "18. How many subsets does a set with 5 elements have?",
+        options: ["10", "15", "25", "32"],
+        answer: "32"
+      },
+      {
+        question: "19. In how many ways can the word 'MATH' be arranged?",
+        options: ["4", "24", "16", "8"],
+        answer: "24"
+      },
+      {
+        question: "20. If you flip a coin 3 times, how many outcomes are possible?",
+        options: ["3", "6", "8", "9"],
+        answer: "8"
+      },
+      {
+        question: "<strong>GRAPHS AND TREES (21-25):</strong><br>  21. A graph with no cycles is called:",
+        options: ["Simple graph", "Tree", "Planar graph", "Subgraph"],
+        answer: "Tree"
+      },
+      {
+        question: "22. A graph is Eulerian if:",
+        options: ["All vertices are connected", "All vertices have odd degree", "All vertices have even degree", "The graph has cycles"],
+        answer: "All vertices have even degree"
+      },
+      {
+        question: "23. A connected graph with n vertices and (n-1) edges is:",
+        options: ["Tree", "Complete graph", "Cyclic graph", "Bipartite"],
+        answer: "Tree"
+      },
+      {
+        question: "24. The number of edges in a complete graph of 5 vertices is:",
+        options: ["10", "5", "15", "20"],
+        answer: "10"
+      },
+      {
+        question: "25. A graph with loops and multiple edges is called:",
+        options: ["Simple graph", "Multigraph", "Directed graph", "Tree"],
+        answer: "Multigraph"
+      },
+      {
+        question: "<strong>ALGEBRA AND NUMBER THEORY (26-30):</strong><br>  26. The GCD of 24 and 36 is:",
+        options: ["6", "12", "18", "3"],
+        answer: "12"
+      },
+      {
+        question: "27. A number divisible by 3 must have:",
+        options: ["An even number", "A sum of digits divisible by 3", "Ends with 0", "Odd digits only"],
+        answer: "A sum of digits divisible by 3"
+      },
+      {
+        question: "28. The number of integers between 1 and 100 divisible by both 2 and 5 is:",
+        options: ["10", "20", "5", "50"],
+        answer: "20"
+      },
+      {
+        question: "29. If a ≡ b (mod m),then:",
+        options: ["a - b is divisible by m", "a + b is divisible by m", "a and b are equal", "a + m = b"],
+        answer: "a - b is divisible by m"
+      },
+      {
+        question: "30. Modular inverse of 3 modulo 7 is:",
+        options: ["2", "3", "5", "6"],
+        answer: "5"
+      },
+      {
+        question: "<strong>BOOLEAN ALGEBRA (31-35):</strong><br>  31. The dual of A + 0 = A is:",
+        options: ["A · 1 = A", "A + 1 = A", "A · 0 = A", "A + A = A"],
+        answer: "A · 1 = A"
+      },
+      {
+        question: "32. The identity A · A' is:",
+        options: ["1", "A", "0", "A'"],
+        answer: "0"
+      },
+      {
+        question: "33. De Morgan's Law: (A + B)'=?",
+        options: ["A' + B'", "A · B", "A' · B'", "A + B"],
+        answer: "A' · B'"
+      },
+      {
+        question: "34. A Boolean variable can take how many values?",
+        options: ["1", "2", "3", "Infinite'"],
+        answer: "2"
+      },
+      {
+        question: "35. Which of the following is an idempotent law?",
+        options: ["A · A = A", "A + A' = 1", "A · 0 = 0", "A + 0 = A"],
+        answer: "A · A = A"
+      },
+      {
+        question: "<strong>MISCELLANEOUS (36-40):</strong><br>  36. The principle of mathematical induction is used to prove:",
+        options: ["Finite statements", "General formulae", "Infinite number of cases", "None of the above"],
+        answer: "Infinite number of cases"
+      },
+      {
+        question: "37. Pigeonhole Principle states:",
+        options: ["Objects can only go in fixed boxes", "If n > m, at least one box has >1 object", "Equal distribution is always possible", "Only even nuumbers matter"],
+        answer: "If n > m, at least one box has >1 object"
+      },
+      {
+        question: "38. The inverse of a bijective function is:",
+        options: ["Not defined", "Unique", "Many", "Always zero"],
+        answer: "Unique"
+      },
+      {
+        question: "39. An example of an infinite set is:",
+        options: ["{1,2,3,4,5}", "{a,e,i,o,u}", "Natural numbers", "Set of days in a week"],
+        answer: "Natural numbers"
+      },
+      {
+        question: "40. The empty set is a subset of:",
+        options: ["Only finite sets", "No set", "Every set", "Itself only"],
+        answer: "Every set"
+      },
+      {
+        question: "<strong>ADVANCED TOPICS (41-45):</strong><br>  41. The number of different 5-letter passwords using 26 letters (no repetition):",
+        options: ["26<sup>5</sup>", "5<sup>5</sup>", "26P5", "26C5"],
+        answer: "26P5"
+      },
+      {
+        question: "42. The adjacency matrix of a graph shows:",
+        options: ["Degrees of vertices", "Number of loops", "Connection between vertices", "Shortest paths"],
+        answer: "Connection between vertices"
+      },
+      {
+        question: "43. A graph is connected if:",
+        options: ["It has loops", "Every node is reachable from any other node", "It has cycles", "Degree is even"],
+        answer: "Every node is reachable from any other node"
+      },
+      {
+        question: "44. In logic, ∃x P(x) means:",
+        options: ["For all x, P(x) is true", "There exists an x such that P(x) is true", "P(x) is undefined", "x is not in the domain"],
+        answer: "There exists an x such that P(x) is true"
+      },
+      {
+        question: "45. Which of these is not a valid logical connective?",
+        options: ["∧", "'n", "+", '"'],
+        answer: "+"
+      },
+      {
+        question: "<strong>BONUS - TRUE/FALSE STYLE (46-50)</strong><br>  46. Every tree is a graph.",
+        options: ["True", "False"],
+        answer: "True"
+      },
+      {
+        question: "47. A set can be its own subset.",
+        options: ["True", "False"],
+        answer: "True"
+      },
+      {
+        question: "48. The null set is equal to {0}.",
+        options: ["True", "False"],
+        answer: "False"
+      },
+      {
+        question: "49. Modulo operation gives the quotient.",
+        options: ["True", "False"],
+        answer: "False"
+      },
+      { question: "50. 'Or' in logic is inclusive by default.",
+        options: ["True", "False"],
+        answer: "True" }
+    ];
+
+    studentForm.addEventListener("submit", function(e) {
+      e.preventDefault();
+      const level = document.getElementById("level").value;
+      if (level !== "200") {
+        levelError.textContent = "Only 200 Level students can proceed to take the test.";
+        return;
+      }
+      studentData = {
+        name: document.getElementById("name").value,
+        matric: document.getElementById("matric").value,
+        department: document.getElementById("department").value,
+        level
+      };
+      levelError.textContent = "";
+      infoPage.classList.add("hidden");
+      testPage.classList.remove("hidden");
+      loadQuestions();
+      startTimer();
+    });
+
+    function loadQuestions() {
+      testForm.innerHTML = "";
+      questions.forEach((q, index) => {
+        const block = document.createElement("div");
+        block.className = "question-block";
+        block.innerHTML = `<p>${q.question}</p>` + q.options.map(opt =>
+          `<label><input type="radio" name="q${index}" value="${opt}"> ${opt}</label>`
+        ).join("");
+        testForm.appendChild(block);
+      });
+    }
+
+    testForm.addEventListener("submit", function(e) {
+      e.preventDefault();
+      clearInterval(timer);
+      let score = 0;
+      questions.forEach((q, index) => {
+        const selected = document.querySelector(`input[name="q${index}"]:checked`);
+        if (selected && selected.value === q.answer) score++;
+      });
+      showResult(score);
+    });
+
+    function startTimer() {
+      timeLeft = initialTime;
+      warningDisplay.textContent = "";
+      timer = setInterval(() => {
+        if (timeLeft === 60) {
+          warningDisplay.textContent = "Test ends in 1 minute. Hurry up!";
+        }
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          warningDisplay.textContent = "Time is up. Submitting your test...";
+          testForm.requestSubmit();
+          overlay.style.display = "flex";
+          testForm.querySelectorAll("input").forEach(el => el.disabled = true);
+          return;
+        }
+        let minutes = Math.floor(timeLeft / 60);
+        let seconds = timeLeft % 60;
+        timerDisplay.textContent = `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+        timeLeft--;
+      }, 1000);
+    }
+
+    function showResult(score) {
+      testPage.classList.add("hidden");
+      resultPage.classList.remove("hidden");
+      resultText.innerHTML = `
+        <strong>${studentData.name}</strong><br>
+        Matric: ${studentData.matric}<br>
+        Dept: ${studentData.department}<br>
+        Level: ${studentData.level}<br><br>
+        <strong>Your Score:</strong> ${score} out of ${questions.length}
+      `;
+    }
+
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      const text = resultText.innerText;
+      const blob = new Blob([text], { type: "text/plain" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "Test_Result.txt";
+      link.click();
+    });
+
+    document.getElementById("printBtn").addEventListener("click", () => {
+      window.print();
+    });
+
+    document.getElementById("restartBtn").addEventListener("click", () => {
+      location.reload();
+    });
+
+    document.getElementById("answerBtn").addEventListener("click", () => {
+      answersDiv.classList.toggle("hidden");
+      if (!answersDiv.classList.contains("hidden")) {
+        answersDiv.innerHTML = "<h3>Correct Answers:</h3><ul>" + questions.map((q, i) =>
+          `<li><strong>Q${i+1}:</strong> ${q.question} <br> ${q.answer} </li>`).join("") + "</ul>";
+      } else {
+        answersDiv.innerHTML = "";
+      }
+    });
+  </script>
+</body>
+</html>
